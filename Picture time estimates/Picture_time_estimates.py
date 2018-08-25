@@ -3,7 +3,7 @@ from PIL import Image
 from PIL.ExifTags import TAGS
 from PIL.ExifTags import GPSTAGS
 from datetime import datetime
-from math import sin, cos, sqrt, atan2, radians
+from math import sin, cos, sqrt, atan2, radians, pow
 
 def _convert_to_degress(value):
     """
@@ -31,7 +31,7 @@ def DetermineDistance(point1, point2):
     lon2 = radians(point2.longitude)
     alt2 = point2.altitude
 
-    # implement altitude
+    dalt = abs(alt1 - alt2)
 
     dlon = lon2 - lon1
     dlat = lat2 - lat1
@@ -39,13 +39,20 @@ def DetermineDistance(point1, point2):
     a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
-    return abs(R * c) * 1000
+    return sqrt(pow(R * c * 1000, 2) + pow(dalt, 2))
 
 def _convert_altitude(value):
     if value is not None and value[0] is not None and value[1] is not None:
         return value[0] / value[1]
     else:
         return 0
+
+class DistanceTime(object):
+    def __init__(self, distance, time):
+        self.distance = distance
+        self.time = time
+    def GetSpeed(self):
+        return (self.distance / 1000) / (self.time / 60 / 60)
 
 class GPSData(object):
     def __init__(self, createdDate, latitude, longitude, altitude):
@@ -75,6 +82,7 @@ def main():
     for root, dir, files in os.walk(r"E:\Development\Resources"): 
         gpsData = []
         tagValues = []
+        timeDeltas = []
         for name in files:
             image = Image.open(os.path.join(root, name))
             info = image._getexif()
@@ -83,21 +91,27 @@ def main():
                 ret['GPSInfo'] = GetTags(ret['GPSInfo'])
             tagValues.append(ret) 
 
-            for item in tagValues:
-                gpsData.append(
-                    GPSData(
-                        datetime.strptime(item.get('DateTimeDigitized'),  "%Y:%m:%d %H:%M:%S"),
-                        _convert_to_degress(item.get('GPSInfo').get('GPSLatitude')),
-                        _convert_to_degress(item.get('GPSInfo').get('GPSLongitude')),
-                        _convert_altitude(item.get('GPSInfo').get('GPSAltitude'))
-                        ))
-            gpsData = [x for x in gpsData if x.createDate is not None and x.latitude != 0 and x.longitude != 0]
-            gpsData.sort()
-            for x in range(0, len(gpsData) - 1):
-                distance = DetermineDistance(gpsData[x], gpsData[x+1])
-                time = (gpsData[x+1].createDate - gpsData[x].createDate).total_seconds()
-                if distance != 0:
-                    print("{0} m in {1} seconds.".format(distance, time))
+        for item in tagValues:
+            gpsData.append(
+                GPSData(
+                    datetime.strptime(item.get('DateTimeDigitized'),  "%Y:%m:%d %H:%M:%S"),
+                    _convert_to_degress(item.get('GPSInfo').get('GPSLatitude')),
+                    _convert_to_degress(item.get('GPSInfo').get('GPSLongitude')),
+                    _convert_altitude(item.get('GPSInfo').get('GPSAltitude'))
+                    ))
+        gpsData = [x for x in gpsData if x.latitude != 0 and x.longitude != 0]
+        gpsData.sort()
+        for x in range(0, len(gpsData) - 1):
+            distance = DetermineDistance(gpsData[x], gpsData[x+1])
+            time = (gpsData[x+1].createDate - gpsData[x].createDate).total_seconds()
+            if time != 0:
+                timeDeltas.append(DistanceTime(distance, time))
+
+        for x in timeDeltas:
+            if x.distance != 0:                
+                print("{0} m in {1} seconds, with a speed of {2} km/h".format(x.distance, x.time, x.GetSpeed()))
             
-        print("Pause Here")
+        averageSpeed = (sum(c.distance for c in timeDeltas) / 1000) / (sum(c.time for c in timeDeltas) / 60 / 60)
+        print("Average Speed: {0} km/h".format(averageSpeed))
+
 main()
