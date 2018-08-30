@@ -5,6 +5,8 @@ from PIL.ExifTags import GPSTAGS
 from datetime import datetime
 from math import sin, cos, sqrt, atan2, radians, pow
 
+LOCATION = "E:\\Development\\Resources"
+
 def _convert_to_degress(value):
     """
     Helper function to convert the GPS coordinates stored in the EXIF to degress in float format
@@ -41,7 +43,7 @@ def DetermineDistance(point1, point2):
 
     return sqrt(pow(R * c * 1000, 2) + pow(dalt, 2))
 
-def _convert_altitude(value):
+def convert_altitude(value):
     if value is not None and value[0] is not None and value[1] is not None:
         return value[0] / value[1]
     else:
@@ -70,7 +72,7 @@ class GPSData(object):
     def __lt__(self, other):
          return self.createDate < other.createDate
 
-def GetTags(items):    
+def get_tags(items):    
     ret = {}
     for key, value in items.items():       
         decoded = GPSTAGS.get(key) or TAGS.get(key)
@@ -79,16 +81,16 @@ def GetTags(items):
 
 
 def main():
-    for root, dir, files in os.walk(r"E:\Development\Resources"): 
+    for root, dirs, files in os.walk(LOCATION): 
         gpsData = []
         tagValues = []
         timeDeltas = []
         for name in files:
-            image = Image.open(os.path.join(root, name))
+            image = Image.open(os.path.join(LOCATION, name))
             info = image._getexif()
-            ret = GetTags(info)  
+            ret = get_tags(info)  
             if ret['GPSInfo'] is not None:
-                ret['GPSInfo'] = GetTags(ret['GPSInfo'])
+                ret['GPSInfo'] = get_tags(ret['GPSInfo'])
             tagValues.append(ret) 
 
         for item in tagValues:
@@ -97,8 +99,9 @@ def main():
                     datetime.strptime(item.get('DateTimeDigitized'),  "%Y:%m:%d %H:%M:%S"),
                     _convert_to_degress(item.get('GPSInfo').get('GPSLatitude')),
                     _convert_to_degress(item.get('GPSInfo').get('GPSLongitude')),
-                    _convert_altitude(item.get('GPSInfo').get('GPSAltitude'))
-                    ))
+                    convert_altitude(item.get('GPSInfo').get('GPSAltitude'))
+                )
+            )
         gpsData = [x for x in gpsData if x.latitude != 0 and x.longitude != 0]
         gpsData.sort()
         for x in range(0, len(gpsData) - 1):
